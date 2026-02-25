@@ -1,0 +1,19 @@
+{
+  "name": "PirataPlay",
+  "short_name": "PirataPlay",
+  "description": "Seu player IPTV sem amarras",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0f",
+  "theme_color": "#e8304a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23e8304a'/><text y='.9em' font-size='72' x='14'>🏴‍☠️</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["entertainment"],
+  "lang": "pt-BR"
+}

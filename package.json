@@ -1,0 +1,11 @@
+{
+  "name": "pirataplay",
+  "version": "2.0.0",
+  "description": "PirataPlay IPTV Player",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
+}
