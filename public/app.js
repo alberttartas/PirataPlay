@@ -3,7 +3,7 @@
 // ══════════════════════════════════════
 
 // ── Estado global ──────────────────────
-let hls = null;
+let player = null; // mpegts.js ou hls nativo
 let currentItem = null;
 let currentTab  = "movies";
 let currentPage = 1;
@@ -85,7 +85,7 @@ async function login() {
 
 function logout() {
   clearLogin();
-  if (hls) hls.destroy();
+  if (player) { player.destroy(); player = null; }
   document.getElementById("app").classList.add("hidden");
   document.getElementById("loginScreen").classList.remove("hidden");
   document.getElementById("host").value = "";
@@ -494,17 +494,17 @@ function openPlayer({ id, name, icon, url, type, sub }) {
   loadStream(url, type, id);
 }
 
-function loadStream(url, type, id, useProxy = false) {
+function loadStream(url, type, id) {
   const video = document.getElementById("videoPlayer");
 
-  // Destrói instância HLS anterior
-  if (hls) {
-    hls.destroy();
-    hls = null;
+  // Destrói player anterior
+  if (player) {
+    player.destroy();
+    player = null;
   }
   video.src = "";
 
-  const src = url; // URL já vem roteada pelo proxy via makeStreamUrl()
+  const src = url;
 
   const onPlaying = () => {
     document.getElementById("playerOverlay").classList.add("hidden");
@@ -533,32 +533,38 @@ function loadStream(url, type, id, useProxy = false) {
     });
   }
 
-  const isHls = src.includes(".m3u8") || src.includes("/proxy?");
+  // mpegts.js — ideal para streams .ts via HTTP ou proxy
+  if (mpegts.getFeatureList().mseLivePlayback) {
+    const isTs   = src.includes(".ts");
+    const isFlv  = src.includes(".flv");
+    const mtype  = isFlv ? "flv" : "mpegts";
 
-  if (isHls && Hls.isSupported()) {
-    // HLS.js suporta tanto .m3u8 quanto .ts via proxy
-    hls = new Hls({
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
-      enableWorker: true,
-      lowLatencyMode: false,
+    player = mpegts.createPlayer({
+      type: mtype,
+      url:  src,
+      isLive: type === "live",
+    }, {
+      enableWorker:          true,
+      lazyLoadMaxDuration:   3 * 60,
+      seekType:              "range",
+      liveBufferLatencyChasing: type === "live",
+      liveBufferLatencyMaxLatency: type === "live" ? 5 : undefined,
     });
-    hls.loadSource(src);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-    hls.on(Hls.Events.ERROR, (_, data) => {
-      if (data.fatal) {
-        onError();
-        hls.destroy();
-        hls = null;
-      }
+
+    player.attachMediaElement(video);
+    player.load();
+    player.play().catch(() => {});
+
+    player.on(mpegts.Events.ERROR, (errType, errDetail) => {
+      console.error("mpegts error:", errType, errDetail);
+      onError();
     });
+
   } else if (src.includes(".m3u8") && video.canPlayType("application/vnd.apple.mpegurl")) {
-    // Safari HLS nativo
+    // Safari — HLS nativo
     video.src = src;
     video.play().catch(() => {});
   } else {
-    // .ts direto ou outros formatos
     video.src = src;
     video.play().catch(() => {});
   }
@@ -575,14 +581,14 @@ function tryProxy() {
   if (!currentItem) return;
   document.getElementById("playerError").classList.add("hidden");
   document.getElementById("playerOverlay").classList.remove("hidden");
-  loadStream(currentItem.url, currentItem.type, currentItem.id, true);
+  loadStream(currentItem.url, currentItem.type, currentItem.id);
 }
 
 function closePlayer() {
   document.getElementById("playerModal").classList.add("hidden");
   const video = document.getElementById("videoPlayer");
   video.pause();
-  if (hls) { hls.destroy(); hls = null; }
+  if (player) { player.destroy(); player = null; }
   video.src = "";
 }
 
