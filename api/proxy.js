@@ -1,67 +1,78 @@
-import { getCredsFromRequest } from "./_session.js";
-import { Readable } from "stream";
-
 export const config = {
-  api: {
-    responseLimit: false,
-    bodyParser: false,
-  },
+  runtime: "edge", // Edge Function — sem limite de tamanho, ideal para streams
 };
 
-export default async function handler(req, res) {
-  if (req.method === "OPTIONS") return res.status(200).end();
+export default async function handler(req) {
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, x-session-token",
+      },
+    });
+  }
 
-  const creds = getCredsFromRequest(req);
-  if (!creds) return res.status(401).send("Sessão inválida.");
+  const { searchParams } = new URL(req.url);
+  const url   = searchParams.get("url");
+  const token = searchParams.get("token");
 
-  const { url } = req.query;
-  if (!url) return res.status(400).send("Parâmetro 'url' obrigatório.");
+  if (!token) {
+    return new Response("Sessão inválida.", { status: 401 });
+  }
+
+  // Valida token (base64url → JSON)
+  try {
+    const json = atob(token.replace(/-/g, "+").replace(/_/g, "/"));
+    JSON.parse(json); // só valida se é JSON válido
+  } catch {
+    return new Response("Token inválido.", { status: 401 });
+  }
+
+  if (!url) {
+    return new Response("Parâmetro 'url' obrigatório.", { status: 400 });
+  }
 
   const decoded = decodeURIComponent(url);
-  if (!/^https?:\/\//i.test(decoded))
-    return res.status(400).send("Somente URLs HTTP(S) são suportadas.");
+  if (!/^https?:\/\//i.test(decoded)) {
+    return new Response("Somente HTTP(S) suportado.", { status: 400 });
+  }
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
-
     const upstream = await fetch(decoded, {
       headers: {
-        "User-Agent":  "Mozilla/5.0 (compatible; PirataPlay/2.0)",
-        "Range":       req.headers["range"] || "",
-        "Connection":  "keep-alive",
+        "User-Agent": "Mozilla/5.0 (compatible; PirataPlay/2.0)",
+        "Range":      req.headers.get("range") || "",
       },
-      signal: controller.signal,
     });
-    clearTimeout(timer);
 
-    // Detecta tipo do stream
-    const isTs  = decoded.includes(".ts");
-    const isM3u = decoded.includes(".m3u8") || decoded.includes(".m3u");
+    // Detecta content-type correto
+    let contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    if (decoded.endsWith(".ts"))   contentType = "video/mp2t";
+    if (decoded.includes(".m3u8")) contentType = "application/vnd.apple.mpegurl";
 
-    // Content-Type correto por tipo
-    if (isTs) {
-      res.setHeader("Content-Type", "video/mp2t");
-    } else if (isM3u) {
-      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-    } else {
-      const ct = upstream.headers.get("content-type");
-      if (ct) res.setHeader("Content-Type", ct);
-    }
+    // Monta headers de resposta
+    const headers = new Headers({
+      "Content-Type":                contentType,
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control":               "no-cache",
+    });
 
-    // Repassa outros headers úteis
-    ["content-length", "content-range", "accept-ranges", "cache-control"].forEach(h => {
+    // Repassa headers de range se existirem
+    ["content-length", "content-range", "accept-ranges"].forEach(h => {
       const v = upstream.headers.get(h);
-      if (v) res.setHeader(h, v);
+      if (v) headers.set(h, v);
     });
 
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.status(upstream.status);
-
-    // Pipe do stream
-    Readable.fromWeb(upstream.body).pipe(res);
+    // Faz streaming real — Edge Functions suportam ReadableStream sem limite
+    return new Response(upstream.body, {
+      status:  upstream.status,
+      headers,
+    });
 
   } catch (err) {
-    if (!res.headersSent) res.status(502).send("Proxy error: " + err.message);
+    return new Response("Proxy error: " + err.message, { status: 502 });
   }
 }
