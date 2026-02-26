@@ -246,7 +246,7 @@ function renderSeriesGrid(list) {
   grid.innerHTML = list.map(s => {
     const id   = s.series_id;
     const name = s.name || "Série";
-    const img  = s.cover || "";
+    const img  = fixImgUrl(s.cover || "");
     const fav  = isFavorite(id);
     return `
       <div class="card" onclick="openSeries(${id})">
@@ -341,7 +341,7 @@ function renderLive(list) {
   grid.innerHTML = list.map(ch => {
     const id   = ch.stream_id;
     const name = ch.name || "Canal";
-    const img  = ch.stream_icon || "";
+    const img  = fixImgUrl(ch.stream_icon || "");
     const fav  = isFavorite(id);
     return `
       <div class="card" onclick="playLive(${id},'${escHtml(name)}','${img}')">
@@ -373,7 +373,7 @@ function setHero(movies) {
   heroItem = movie;
 
   const hero = document.getElementById("hero");
-  hero.style.backgroundImage = `url(${movie.backdrop || movie.stream_icon})`;
+  hero.style.backgroundImage = `url(${fixImgUrl(movie.backdrop || movie.stream_icon)})`;
   hero.classList.remove("hidden");
 
   document.getElementById("heroBadge").textContent    = "DESTAQUE";
@@ -659,7 +659,7 @@ function renderFavorites() {
   }
   empty.classList.add("hidden");
   grid.innerHTML = favs.map(item => {
-    const img = item.stream_icon || item.cover || "";
+    const img = fixImgUrl(item.stream_icon || item.cover || "");
     const type = item.type || "movie";
     const clickFn = type === "live"
       ? `playLive(${item.id},'${escHtml(item.name)}','${img}')`
@@ -693,7 +693,7 @@ function renderContinueWatching() {
 
   section.classList.remove("hidden");
   grid.innerHTML = hist.map(item => {
-    const img = item.cover || "";
+    const img = fixImgUrl(item.cover || "");
     const clickFn = item.type === "live"
       ? `playLive(${item.id},'${escHtml(item.name)}','${img}')`
       : item.type === "series"
@@ -802,7 +802,7 @@ function renderPagination(total, page, limit, onPage) {
 function cardHTML(item, type) {
   const id   = item.stream_id;
   const name = item.name || "Sem título";
-  const img  = item.poster || item.stream_icon || "";
+  const img  = fixImgUrl(item.poster || item.stream_icon || "");
   const fav  = isFavorite(id);
   const year = item.year ? `<span class="card-sub">${item.year}</span>` : "";
   return `
@@ -829,4 +829,13 @@ function escHtml(str) {
     .replace(/'/g, "&#39;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+
+// ── Fix Mixed Content para imagens HTTP ────────────────────────
+// Converte http:// → https:// nas imagens
+// O Chrome já faz isso automaticamente, mas esta função garante
+function fixImgUrl(url) {
+  if (!url) return "";
+  return url.replace(/^http:\/\//i, "https://");
 }
